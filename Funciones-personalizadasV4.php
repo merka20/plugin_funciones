@@ -506,7 +506,18 @@ if (class_exists('autoptimizeCache')) {
     }
 }
 
+//Include primera capa RGPD en formulario registro
 
+
+<?php
+add_action( 'register_form', 'eg_primera_capa_RGPD_registro' );
+function eg_primera_capa_RGPD_registro() { ?>
+    <p>
+		<strong>Responsable</strong>: Merka20 | <strong>Finalidad</strong>: Crear tu cuenta y permitir el acceso | <strong>Legitimación</strong>: Tu consentimiento | <strong>Destinatario</strong>: Servidores de OVH Francia | <strong>Derechos</strong>: Acceso, supresión, rectificación, oposición, portabilidad, limitación.
+    </p>
+	</br>
+    <?php
+}
 
 // Include the Google Analytics Tracking Code (ga.js)
 
