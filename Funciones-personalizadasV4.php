@@ -10,7 +10,7 @@ License: GPLv2 o posterior
 Fecha: 18/11/2018
 */
 
-//PARA ACCER QUE COJA LOS ESTILOS DESDE EL TEMA HIJO
+//PARA HACER QUE COJA LOS ESTILOS DESDE EL TEMA HIJO
 
 add_action( 'wp_enqueue_scripts', 'skilled_child_theme_enqueue_styles' );
 function skilled_child_theme_enqueue_styles() {
