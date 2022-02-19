@@ -1,0 +1,228 @@
+<?php
+/*
+Plugin Name: Funciones Personales
+Plugin URI: http://merka20.com/
+Description: Plugin que personaliza la pagina de login e incluye ciertas medidas de seguridad para WP liberando espacio en <code>functions.php</code>.
+Version: 1.0
+Author: Oscar Domingo
+Author URI: http://merka20.com/
+License: GPLv2 o posterior
+*/
+defined('ABSPATH') or die;
+
+// Codigos de seguridad en WordPress
+
+////////////////////////////// * TEMAS DE DISEÑO PARA EL INICIO DEL BACKOFFICE *//////////////////////////////
+
+/*HACER QUE APAREZCA EL LOGO DE EMPRESA AL INICIO DE SESION*/
+
+function merka20_custom_login_logo() {  
+
+    echo '<style type="text/css"> 
+        .login h1 a {  
+            background-image: url(' . get_stylesheet_directory_uri() . '/imagenes/logo-santisimo-sacramento.png)!important;
+
+            padding-bottom: 0px;  
+            width: 80% !important;
+            background-size: contain !important;
+            /*height:160px !important;*/
+        } 
+    </style>';  
+
+}  
+
+add_action( 'login_enqueue_scripts', 'merka20_custom_login_logo' );  
+
+
+function my_login_logo_url() {  
+
+    return home_url();  
+}  
+
+add_filter( 'login_headerurl', 'my_login_logo_url' );  
+
+
+function my_login_logo_url_title() {  
+
+    return 'Colegio Santísimo Sacramento';  
+}
+
+add_filter( 'login_headertitle', 'my_login_logo_url_title' );  
+
+function wpbod_estilo_login() {
+    wp_enqueue_style(
+        'estilo-acceso',
+        get_stylesheet_directory_uri() . '/css/estilo-acceso.css'
+    );
+}
+add_action( 'login_enqueue_scripts', 'wpbod_estilo_login' );
+
+/* FIN HACER QUE APAREZCA EL LOGO DE EMPRESA AL INICIO DE SESION */
+
+////////////////////////////// * TEMAS DE SEGURIDAD PARA WORDPRESS *//////////////////////////////
+
+/* ELIMINAR REFERENCIAS A LA VERSIÖN DE WORDPRESS */
+
+function quitar_version_wp() {
+
+return '';
+
+}
+
+add_filter('the_generator', 'quitar_version_wp');
+
+
+/* HACE QUE WP NO INFORME DE QUE FALLA EN EL LOGIN */
+
+function sin_errores(){
+
+return 'Acceso denegado.<br/>Contraseña o usuario erroneos';
+
+}
+
+add_filter( 'login_errors', 'sin_errores');
+
+// Desabilitar el selector de idiomas de login.
+add_filter( 'login_display_language_dropdown', '__return_false' );
+
+
+/* HACER NOINDEX EN CIERTAS PÁGINAS DEL SITIO */
+//
+if ( !function_exists( 'add_noindex_nofollow_404' ) ):
+
+function add_noindex_nofollow_404() {
+    if ( is_404()||is_page('aviso-legal')||is_page('politica-de-cookies')|| is_page('politica-de-privacidad')|| is_page('condiciones-de-compra') || is_page('error-404') ) {
+        echo '<meta name="robots" content="noindex, nofollow" />';
+    }
+}
+endif;
+
+add_action( 'wp_head', 'add_noindex_nofollow_404' );
+
+
+/* QUITAR XML-RPC DE WORDPRESS */
+
+add_filter( 'xmlrpc_methods', function( $methods ) {
+   unset( $methods['pingback.ping'] );
+   return $methods;
+} );
+
+
+/* Cabecera X-Content-Type //Cabecera X-Frame //Cabecera XSS */
+
+add_action( 'send_headers', 'add_header_seguridad' );
+function add_header_seguridad() {
+header( 'X-Content-Type-Options: nosniff' );
+header( 'X-Frame-Options: SAMEORIGIN' );
+header( 'X-XSS-Protection: 1;mode=block' );
+}
+
+/* QUITAR LA NUMERACIÓN DE USUARIOS */
+
+if ( ! is_admin() && isset($_SERVER['REQUEST_URI'])){
+    if(preg_match('/(wp-comments-post)/', $_SERVER['REQUEST_URI']) === 0 && !empty($_REQUEST['author']) ) {
+        wp_die('404 - File not found!');
+    }
+}
+
+//OCULTAR DIRECCIONES DE EMAIL
+function security_remove_emails($content) {
+    $pattern = '/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4})/i';
+    $fix = preg_replace_callback($pattern, "security_remove_emails_logic", $content);
+    return $fix;
+}
+function security_remove_emails_logic($result) {
+    return antispambot($result[1]);
+}
+add_filter( 'the_content', 'security_remove_emails', 20 ); //ocultar en posts
+add_filter( 'comment_text', 'security_remove_emails', 20 ); //ocultar en comentarios
+add_filter( 'widget_text', 'security_remove_emails', 20 ); //ocultar en widgets
+
+
+//AÑADIR CAMPOS RGPD EN COMENTARIOS
+
+/** Aceptación después del formulario de comentarios **/
+add_filter( 'comment_form_field_comment', 'mi_campo_de_privacidad_en_comentarios' );
+function mi_campo_de_privacidad_en_comentarios( $comment_field ) {
+    return $comment_field.'<p class="pprivacy"><input type="checkbox" name="privacy" value="privacy-key" class="privacyBox" aria-req="true">&nbsp;&nbsp;Acepto la <a target="blank" href="https://paisajesimaginados.es/politica-de-privacidad/">política de privacidad</a><p>';
+}
+//validación por javascript
+add_action('wp_footer','validate_privacy_comment_javascript');
+function validate_privacy_comment_javascript(){
+    if (is_single() && comments_open()){
+        wp_enqueue_script('jquery');
+        ?>
+        <script type="text/javascript">
+        jQuery(document).ready(function($){
+            $("#submit").click(function(e)){
+                if (!$('.privacyBox').prop('checked')){
+                    e.preventDefault();
+                    alert('Debes aceptar nuestra política de privacidad marcando la casilla ....');
+                    return false;
+                }
+            }
+        });
+        </script>
+        <?php
+    }
+}
+
+//sin validación js
+add_filter( 'preprocess_comment', 'verify_comment_privacy' );
+function verify_comment_privacy( $commentdata ) {
+    if ( ! isset( $_POST['privacy'] ) )
+        wp_die( __( 'Error: Debes aceptar nuestra política de privacidad marcando la casilla ....' ) );
+
+    return $commentdata;
+}
+
+//guarda el campo como comment meta
+add_action( 'comment_post', 'save_comment_privacy' );
+function save_comment_privacy( $comment_id ) {
+    add_comment_meta( $comment_id, 'privacy', $_POST[ 'privacy' ] );
+}
+
+//CAMPOS PRIMERA CAPA DE INFORMACIÓN FINALIDAD LEGITIMACIÓN ETC..
+
+/** Primera capa privacidad en comentarios **/
+$acceptance = '<p class="comment-reply-title comentarios">Información sobre protección de datos</p>
+<p class="comment-subscription-form"><ul>
+<li class="aviso"><strong>Responsable de los datos: </strong> Santísimo sacramento te informa que los datos de carácter personal que nos proporciones rellenando el presente formulario serán tratados por Santísimo sacramento como responsable de esta web.</li>
+<li class="aviso"><strong>Finalidad: </strong>La finalidad de la recogida y tratamiento de los datos personales que te solicitamos es para gestionar los comentarios del blog.</li>
+<li class="aviso"><strong>Legitimación: </strong> Al marcar la casilla de aceptación, estás dando tu legítimo consentimiento para que tus datos sean tratados conforme a las finalidades de este formulario descritas en la política de privacidad.</li>
+<li class="aviso"><strong>Destinatario: </strong>Como usuario e interesado te informamos que los datos que nos facilitas estarán ubicados en los servidores de Integra de la empresa Planalfa (proveedor de hosting de santísimo sacramento) dentro de la UE. Ver política de privacidad de <a href="https://planalfa.es/politica-de-privacidad" target="_blank" rel="noopener">Planalfa</a>.</li>
+<li class="aviso">El hecho de que no introduzcas los datos de carácter personal que aparecen en el formulario como obligatorios podrá tener como consecuencia que no podamos atender tu solicitud.</li>
+<li class="aviso"><strong>Derechos: </strong>Podrás ejercer tus derechos de acceso, rectificación, limitación y suprimir los datos en colegio@santisimosacramento.com así como el Derecho a presentar una reclamación ante una autoridad de control.</li>
+<li class="aviso">Puedes consultar la información adicional y detallada sobre Protección de Datos en nuestra página web, así como consultar nuestra <a href="https://santisimosacramento.com/politica-de-privacidad/">política de privacidad.</a></li>
+</ul></p>';
+
+function ft_acceptance_comments( $form ) {
+	global $acceptance;
+	return $form . $acceptance;
+}
+	add_action( 'comment_form_field_comment', 'ft_acceptance_comments' );
+
+
+//borrar campo web en comentarios del blog
+//
+add_filter ('comment_form_field_url', function ($url) {
+  return;
+});
+
+// desactivar las verificaciones de correo electrónico del administrador 
+add_filter( 'admin_email_check_interval', '__return_false' );
+
+// Mover los script al footer
+
+function scripts_footer() { 
+
+    remove_action('wp_head', 'wp_print_scripts'); 
+    remove_action('wp_head', 'wp_print_head_scripts', 9); 
+    remove_action('wp_head', 'wp_enqueue_scripts', 1);
+    add_action('wp_footer', 'wp_print_scripts', 5);
+    add_action('wp_footer', 'wp_enqueue_scripts', 5);
+    add_action('wp_footer', 'wp_print_head_scripts', 5); 
+} 
+add_action( 'wp_enqueue_scripts', 'scripts_footer' );
+
+?>
